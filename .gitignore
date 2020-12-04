@@ -1,0 +1,5 @@
+/tmp/
+/obj/
+a.out
+src/*.swp
+src/position.*
