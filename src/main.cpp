@@ -14,47 +14,113 @@
 
 #include "boost_util.h"
 #include "arg_parse.h"
-#include "display_sender.h"
 
 using namespace std;
 using namespace cv;
 
 arg_parse args;
 
-vector<unsigned char> buf0_;
 
-bool _sub_process0(const unsigned char* s, int w, int h, int channel, intx, inty, unsigned char* history)
+bool sub_process(const unsigned char* src, int w, int h, int channels, int& x, int& y, unsigned char* history)
 {
-	if(x < 0 || y < 0 || x >= w || y >= h || *(s+(y*w+x)*channel) != 255 || *(history+y*w+x) == 255){
-		return false;
-	}
-	*(history+y*w+x) = 255;
-	return true;
-}
-
-bool _sub_process1(const unsigned char* s, int w, int h, int channel, int x_start, int y_start, unsigned char* history, list<int>& stuck)
-{
-	int x = x_start;
-	int y = y_start;
-	while(true){
-		int eight_flag = stuck.back;
-		if(eight_flag == 8){
-			stuck.pop_back();
-			if(stuck.size() == 0) return;
-		}
-		++stuck.back;
-		if(eight_flag == 0){
-			if(_sub_process0(s, w, h, channel, x, y, history)){
-				stuck.push_back(0);
-			}else{
-				stuck.pop_back();
-			}
-		}else if(eight_flag == 1){
-			if(_sub_process0(s, w, h, channel, x-1, y, history, stuck)){
-				stuck.back = stuck.back + 1;
+	int xx, yy;
+	{
+		xx = x-1;
+		yy = y;
+		if(x > 0){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
 			}
 		}
 	}
+	{
+		xx = x;
+		yy = y-1;
+		if(y > 0){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
+			}
+		}
+	}
+	{
+		xx = x+1;
+		yy = y;
+		if(x < w-1){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
+			}
+		}
+	}
+	{
+		xx = x;
+		yy = y+1;
+		if(y < h-1){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
+			}
+		}
+	}
+	{
+		xx = x-1;
+		yy = y-1;
+		if(x > 0 && y > 0){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
+			}
+		}
+	}
+	{
+		xx = x+1;
+		yy = y-1;
+		if(x < w-1 && y > 0){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
+			}
+		}
+	}
+	{
+		xx = x+1;
+		yy = y+1;
+		if(x < w-1 && y < h-1){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
+			}
+		}
+	}
+	{
+		xx = x-1;
+		yy = y+1;
+		if(x > 0 && y < h-1){
+			if(*(src+(yy*w+xx)*channels+0) == 255 && *(history+yy*w+xx) == 0){
+				*(history+yy*w+xx) = 255;
+				x = xx;
+				y = yy;
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 std::shared_ptr<Mat> process(Mat& m)
@@ -62,16 +128,14 @@ std::shared_ptr<Mat> process(Mat& m)
 	std::shared_ptr<Mat> ret = make_shared<Mat>(m);
 	int w = m.cols;
 	int h = m.rows;
-	int channel = m.channels();
+	int channels = m.channels();
 	int size = w*h;
-	buf0_.resize(size);
-	memset(&buf0_[0], 0, size);
 	unsigned char* b = m.data;
 	int x_start = -1;
 	int y_start = -1;
 	for(int y=0;y<h;++y){
 		for(int x=0;x<w;++x){
-			if(*(b+(y*w+x)*channel+0) == 255){
+			if(*(b+(y*w+x)*channels+0) == 255){
 				x_start = x;
 				y_start = y;
 				break;
@@ -83,6 +147,16 @@ std::shared_ptr<Mat> process(Mat& m)
 	if(x_start < 0){
 		_li << "no start point.";
 		return ret;
+	}
+
+	vector<unsigned char> history;
+	history.resize(size);
+	memset(&history[0], 0, size);
+	history[y_start*w+x_start] = 255;
+	cout << x_start << ", " << y_start << endl;
+
+	while(sub_process(m.data, w, h, channels, x_start, y_start, &history[0])){
+		cout << x_start << ", " << y_start << endl;
 	}
 
 	return ret;
@@ -100,24 +174,11 @@ int main(int argc, const char* argv[])
 	args.print(ss_args);
 	_li << ss_args.str();
 
-	shared_ptr<display_sender> display_sender_;
-	if(args.display_ip_address.size() > 0){
-		display_sender_ = std::make_shared<display_sender>(0, args.display_ip_address, args.display_port);
-	}
-
 	Mat m_input = imread(args.input_image.c_str());
 	if(m_input.cols == 0){
 		_le << "invalid input_image path:" << args.input_image;
 		return 1;
 	}
-	auto m_send = process(m_input);
-
-	if(display_sender_ != nullptr && m_send != nullptr){
-		display_sender_->send(*(m_send.get()));
-		_li << "sended(" << m_send->cols << ", " << m_send->rows << ")";
-	}
-
-	getchar();
-
+	process(m_input);
 	return 0;
 }
