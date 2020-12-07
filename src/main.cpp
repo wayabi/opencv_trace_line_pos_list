@@ -123,9 +123,11 @@ bool sub_process(const unsigned char* src, int w, int h, int channels, int& x, i
 	return false;
 }
 
-std::shared_ptr<Mat> process(Mat& m)
+vector<int> xx_;
+vector<int> yy_;
+
+bool process(Mat& m, int start_pixel_value)
 {
-	std::shared_ptr<Mat> ret = make_shared<Mat>(m);
 	int w = m.cols;
 	int h = m.rows;
 	int channels = m.channels();
@@ -135,7 +137,7 @@ std::shared_ptr<Mat> process(Mat& m)
 	int y_start = -1;
 	for(int y=0;y<h;++y){
 		for(int x=0;x<w;++x){
-			if(*(b+(y*w+x)*channels+0) == 255){
+			if(*(b+(y*w+x)*channels+0) == start_pixel_value){
 				x_start = x;
 				y_start = y;
 				break;
@@ -146,20 +148,28 @@ std::shared_ptr<Mat> process(Mat& m)
 
 	if(x_start < 0){
 		_li << "no start point.";
-		return ret;
+		return false;
 	}
 
 	vector<unsigned char> history;
 	history.resize(size);
 	memset(&history[0], 0, size);
 	history[y_start*w+x_start] = 255;
-	cout << x_start << ", " << y_start << endl;
-
-	while(sub_process(m.data, w, h, channels, x_start, y_start, &history[0])){
-		cout << x_start << ", " << y_start << endl;
+//	cout << x_start << ", " << y_start << endl;
+	xx_.push_back(x_start);
+	yy_.push_back(y_start);
+	int x = x_start;
+	int y = y_start;
+	while(sub_process(m.data, w, h, channels, x, y, &history[0])){
+//		cout << x << ", " << y << endl;
+		xx_.push_back(x);
+		yy_.push_back(y);
 	}
 
-	return ret;
+	if(xx_.size() >= 4 && abs(x-x_start) <= 1 && abs(y-y_start)){
+		return true;
+	}
+	return false;
 }
 
 int main(int argc, const char* argv[])
@@ -179,6 +189,18 @@ int main(int argc, const char* argv[])
 		_le << "invalid input_image path:" << args.input_image;
 		return 1;
 	}
-	process(m_input);
+	bool is_loop = process(m_input, args.start_pixel_value);
+
+	int num = xx_.size();
+	for(int i=0;i<num;++i){
+		cout << xx_[i] << ",";
+	}
+	cout << endl;
+	for(int i=0;i<num;++i){
+		cout << yy_[i] << ",";
+	}
+	cout << endl;
+
+	cout << "is_loop:" << is_loop << endl;
 	return 0;
 }
